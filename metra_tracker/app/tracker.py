@@ -108,8 +108,9 @@ class TripState:
 
 
 class TrackedTrip:
-    def __init__(self, cfg, schedule, runs=None):
+    def __init__(self, cfg, schedule, runs=None, problem_delay_min=None):
         self.cfg = cfg
+        self.problem_delay_min = problem_delay_min  # a delay this big (en route or not yet departed) is a problem
         self.runs = runs if runs is not None else {}  # persisted per-run evidence, keyed "slug:YYYYMMDD:train"
         self.bind(schedule)
 
@@ -301,6 +302,8 @@ class TrackedTrip:
         if st.arrived:
             st.status = ARRIVED
             st.delay_min = mem.get("final_delay")
+            if mem.get("dep_actual"):
+                st.departure = datetime.fromtimestamp(mem["dep_actual"], now.tzinfo)
             if mem.get("arrived_at_pred"):
                 st.arrival = datetime.fromtimestamp(mem["arrived_at_pred"], now.tzinfo)
             st.detail = f"Arrived at {s.stop_name(self.to_id)}"
@@ -395,7 +398,8 @@ class TrackedTrip:
         if st.arrived and "final_delay" not in mem:
             mem["final_delay"] = mem.get("delay")
             st.delay_min = mem["final_delay"]
-        st.problem = st.status in PROBLEM_STATES or bool(st.extra.get("disruption"))
+        late = self.problem_delay_min and st.status in (LATE, DEPARTED) and (st.delay_min or 0) >= self.problem_delay_min
+        st.problem = st.status in PROBLEM_STATES or bool(st.extra.get("disruption")) or bool(late)
         return st, inst
 
     def _not_running(self, now, inst, reason):

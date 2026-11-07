@@ -15,7 +15,7 @@ from .tracker import DAY_FILTERS, EventGate, TrackedTrip, TripConfig
 from .web import Web
 
 DATA = os.environ.get("METRA_DATA", "/data")
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 FAST, SLOW = 30, 300  # tripupdates/positions poll seconds (in / outside a live window)
 ALERTS_FAST, ALERTS_SLOW = 60, 180
 PUBLISHED_EVERY = 15 * 60
@@ -124,7 +124,8 @@ class App:
                 t.bind(self.schedule)
         else:
             runs = self.store.data.setdefault("runs", {})
-            self.trips = [TrackedTrip(c, self.schedule, runs) for c in self.trip_cfgs]
+            self.trips = [TrackedTrip(c, self.schedule, runs, self.opts.get("delay_threshold_min", 5))
+                          for c in self.trip_cfgs]
         self.pub.publish("metra_tracker/schedule/state", {
             "valid_until": self.schedule.feed_end.isoformat() if self.schedule.feed_end else None,
             "valid_from": self.schedule.feed_start.isoformat() if self.schedule.feed_start else None,

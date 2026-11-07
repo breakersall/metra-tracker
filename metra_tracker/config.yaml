@@ -1,5 +1,5 @@
 name: Metra Tracker
-version: "0.4.1"
+version: "0.4.2"
 slug: metra_tracker
 description: Track your Metra trains (delays, cancellations, service alerts) as Home Assistant entities via MQTT.
 url: https://metra.com/metra-gtfs-api

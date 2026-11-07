@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2
+- A trip that is late by the delay threshold or more (before departure or en route) now sets its Problem sensor.
+- After arrival, the departure sensor keeps the actual departure time instead of reverting to the schedule.
+
 ## 0.4.1
 - Clear message when no token/trips are configured; generic defaults and docs.
 

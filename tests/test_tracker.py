@@ -177,6 +177,25 @@ class TrackerTests(unittest.TestCase):
         # Feed drops the trip after arrival -> Arrived, not Unconfirmed.
         st, _ = self.run_am(self.a(9), tu=feed())
         self.assertEqual(st.status, ARRIVED)
+        self.assertEqual(st.departure, self.d(7))  # keeps the actual departure, not the schedule
+
+    def test_big_delay_is_a_problem(self):
+        am = TrackedTrip(self.am.cfg, self.s, problem_delay_min=5)
+        inst, _ = am.current_instance(self.o(-12))
+        m = feed()
+        add_tu(m, inst.trip, WED, self.stops_from(inst, 3))
+        st, _ = self.run_am(self.d(-7), tu=m, trip=am)
+        self.assertEqual((st.status, st.problem), (LATE, False))
+        m = feed()
+        add_tu(m, inst.trip, WED, self.stops_from(inst, 7))
+        st, _ = self.run_am(self.d(-7), tu=m, trip=am)
+        self.assertEqual((st.status, st.problem), (LATE, True))
+        m = feed()
+        add_tu(m, inst.trip, WED, self.stops_from(inst, 7, start_idx=inst.i_from + 1))
+        st, _ = self.run_am(self.d(13), tu=m, trip=am)
+        self.assertEqual((st.status, st.problem), (DEPARTED, True))
+        st, _ = self.run_am(self.a(9), tu=feed(), trip=am)
+        self.assertEqual((st.status, st.problem), (ARRIVED, False))
 
     def test_departed_survives_prediction_dropout(self):
         inst, _ = self.am.current_instance(self.o(-12))
