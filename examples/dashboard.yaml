@@ -1,0 +1,258 @@
+# Example Metra dashboard (Settings -> Dashboards -> Add dashboard -> New dashboard from scratch,
+# then ⋮ -> Edit dashboard -> ⋮ -> Raw configuration editor, paste this).
+# Assumes two trips named "Morning" and "Evening" on the BNSF line; rename the entity ids
+# (sensor.metra_<trip>_status, sensor.metra_<line>_alerts) to match your add-on configuration.
+# Needs Mushroom cards (HACS). The 'Live map' card opens the add-on's ingress panel.
+title: Metra
+views:
+- title: Commute
+  path: commute
+  type: sections
+  max_columns: 3
+  badges:
+  - type: entity
+    entity: sensor.metra_commute_summary
+    show_name: true
+    show_state: false
+    name: Live map
+    icon: mdi:map-marker-path
+    color: blue
+    tap_action:
+      action: navigate
+      navigation_path: /local_metra_tracker
+  - type: entity
+    entity: switch.metra_commuting_today
+    show_name: true
+    name: Commuting
+    tap_action:
+      action: toggle
+    color: green
+  - type: entity
+    entity: sensor.metra_bnsf_alerts
+    show_name: true
+    name: BNSF alerts
+    color: amber
+  - type: entity
+    entity: binary_sensor.metra_feed
+    show_name: true
+    name: Metra feed
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Morning
+      heading_style: title
+      icon: mdi:weather-sunset-up
+      badges:
+      - type: entity
+        entity: binary_sensor.metra_morning_problem
+        show_state: false
+        show_icon: true
+        visibility:
+        - condition: state
+          entity: binary_sensor.metra_morning_problem
+          state: 'on'
+        color: red
+    - type: custom:mushroom-template-card
+      entity: sensor.metra_morning_status
+      primary: Train {{ state_attr('sensor.metra_morning_status','train') or '—' }} · {{ states('sensor.metra_morning_status')
+        }}{% set d = state_attr('sensor.metra_morning_status','delay_min') %}{{ ' · ' ~ d ~ ' min late' if d and d > 1 else
+        '' }}
+      secondary: |-
+        {% macro hm(x) %}{{ as_timestamp(x, 0) | timestamp_custom('%-I:%M %p') if x else '—' }}{% endmacro %}{% set a = states['sensor.metra_morning_status'].attributes if states['sensor.metra_morning_status'] is defined else {} %}{{ a.get('from','') }} {{ hm(a.get('predicted_departure')) }} → {{ a.get('to','') }} {{ hm(a.get('predicted_arrival')) }}{% if a.get('service_date') and a.get('service_date') != now().strftime('%Y-%m-%d') %} · {{ as_timestamp(a.get('scheduled_departure'),0) | timestamp_custom('%a %b %-d') }}{% endif %}{% if a.get('detail') %}
+        {{ a.get('detail') }}{% endif %}
+      icon: '{% set s = states(''sensor.metra_morning_status'') %}{{ {''Cancelled'':''mdi:train-variant'',''Not stopping'':''mdi:debug-step-over'',''Delayed'':''mdi:alert-octagon'',''Departed'':''mdi:train-car-passenger'',''Arrived'':''mdi:flag-checkered'',''Unconfirmed'':''mdi:help-circle-outline'',''Not
+        running today'':''mdi:calendar-remove'',''Late'':''mdi:timer-alert-outline''}.get(s, ''mdi:train'') }}'
+      color: '{% set s = states(''sensor.metra_morning_status'') %}{{ ''red'' if is_state(''binary_sensor.metra_morning_problem'',
+        ''on'') else {''On time'':''green'',''Late'':''amber'',''Departed'':''blue'',''Arrived'':''teal'',''Unconfirmed'':''orange'',''No
+        prediction'':''grey'',''Scheduled'':''grey''}.get(s, ''grey'') }}'
+      multiline_secondary: true
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: 2
+    - type: custom:mushroom-template-card
+      entity: sensor.metra_morning_departure
+      primary: Departs
+      secondary: '{% macro hm(x) %}{{ as_timestamp(x, 0) | timestamp_custom(''%-I:%M %p'') if x else ''—'' }}{% endmacro %}{%
+        set a = states[''sensor.metra_morning_status''].attributes if states[''sensor.metra_morning_status''] is defined else
+        {} %}{{ hm(a.get(''predicted_departure'')) }}{% if a.get(''predicted_departure'') != a.get(''scheduled_departure'')
+        %} (sched {{ hm(a.get(''scheduled_departure'')) }}){% endif %}'
+      icon: mdi:clock-start
+      color: blue
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: custom:mushroom-template-card
+      entity: sensor.metra_morning_arrival
+      primary: Arrives
+      secondary: '{% macro hm(x) %}{{ as_timestamp(x, 0) | timestamp_custom(''%-I:%M %p'') if x else ''—'' }}{% endmacro %}{%
+        set a = states[''sensor.metra_morning_status''].attributes if states[''sensor.metra_morning_status''] is defined else
+        {} %}{{ hm(a.get(''predicted_arrival'')) }}{% if a.get(''predicted_arrival'') != a.get(''scheduled_arrival'') %} (sched
+        {{ hm(a.get(''scheduled_arrival'')) }}){% endif %}'
+      icon: mdi:clock-end
+      color: teal
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: markdown
+      grid_options:
+        columns: 12
+        rows: auto
+      text_only: true
+      content: |-
+        {% macro hm(x) %}{{ as_timestamp(x, 0) | timestamp_custom('%-I:%M %p') if x else '—' }}{% endmacro %}{% set a = states['sensor.metra_morning_status'].attributes if states['sensor.metra_morning_status'] is defined else {} %}{% set al = (a.get('alerts') or []) | selectattr('relevance', 'in', ['train','station','line']) | list %}{% if a.get('disruption') %}**⚠️ {{ a.get('disruption').get('header') }}**
+
+        {% endif %}{% if a.get('incoming_train') and a.get('departure_risk_min') %}🔁 Equipment arrives on train {{ a.get('incoming_train') }} ({{ a.get('incoming_delay_min') }} min late) — departure could slip ~{{ a.get('departure_risk_min') }} min
+
+        {% endif %}{% if a.get('advisory_delay_min') %}ℹ️ Metra advisory: following trains may be ~{{ a.get('advisory_delay_min') }} min late
+
+        {% endif %}{% for x in al[:3] %}{{ '🚆' if x.get('relevance') == 'train' else '🏛️' if x.get('relevance') == 'station' else '📢' }} {{ x.get('header') }}
+
+        {% endfor %}{% set alt = a.get('alternatives') or [] %}{% if alt %}**Other trains**
+
+        | Train | Departs | Arrives | |
+        |:--|:--|:--|:--|
+        {% for x in alt %}| {{ x.get('train') }} | {{ hm(x.get('departure')) }} | {{ hm(x.get('arrival')) }} | {{ 'express' if x.get('stops_between', 9) <= 3 else x.get('stops_between') ~ ' stops' }}{{ ' · ' ~ x.get('delay_min') ~ 'm late' if x.get('delay_min') else '' }} |
+        {% endfor %}{% endif %}
+  - type: grid
+    cards:
+    - type: heading
+      heading: Evening
+      heading_style: title
+      icon: mdi:weather-sunset-down
+      badges:
+      - type: entity
+        entity: binary_sensor.metra_evening_problem
+        show_state: false
+        show_icon: true
+        visibility:
+        - condition: state
+          entity: binary_sensor.metra_evening_problem
+          state: 'on'
+        color: red
+    - type: custom:mushroom-template-card
+      entity: sensor.metra_evening_status
+      primary: Train {{ state_attr('sensor.metra_evening_status','train') or '—' }} · {{ states('sensor.metra_evening_status')
+        }}{% set d = state_attr('sensor.metra_evening_status','delay_min') %}{{ ' · ' ~ d ~ ' min late' if d and d > 1 else
+        '' }}
+      secondary: |-
+        {% macro hm(x) %}{{ as_timestamp(x, 0) | timestamp_custom('%-I:%M %p') if x else '—' }}{% endmacro %}{% set a = states['sensor.metra_evening_status'].attributes if states['sensor.metra_evening_status'] is defined else {} %}{{ a.get('from','') }} {{ hm(a.get('predicted_departure')) }} → {{ a.get('to','') }} {{ hm(a.get('predicted_arrival')) }}{% if a.get('service_date') and a.get('service_date') != now().strftime('%Y-%m-%d') %} · {{ as_timestamp(a.get('scheduled_departure'),0) | timestamp_custom('%a %b %-d') }}{% endif %}{% if a.get('detail') %}
+        {{ a.get('detail') }}{% endif %}
+      icon: '{% set s = states(''sensor.metra_evening_status'') %}{{ {''Cancelled'':''mdi:train-variant'',''Not stopping'':''mdi:debug-step-over'',''Delayed'':''mdi:alert-octagon'',''Departed'':''mdi:train-car-passenger'',''Arrived'':''mdi:flag-checkered'',''Unconfirmed'':''mdi:help-circle-outline'',''Not
+        running today'':''mdi:calendar-remove'',''Late'':''mdi:timer-alert-outline''}.get(s, ''mdi:train'') }}'
+      color: '{% set s = states(''sensor.metra_evening_status'') %}{{ ''red'' if is_state(''binary_sensor.metra_evening_problem'',
+        ''on'') else {''On time'':''green'',''Late'':''amber'',''Departed'':''blue'',''Arrived'':''teal'',''Unconfirmed'':''orange'',''No
+        prediction'':''grey'',''Scheduled'':''grey''}.get(s, ''grey'') }}'
+      multiline_secondary: true
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: 2
+    - type: custom:mushroom-template-card
+      entity: sensor.metra_evening_departure
+      primary: Departs
+      secondary: '{% macro hm(x) %}{{ as_timestamp(x, 0) | timestamp_custom(''%-I:%M %p'') if x else ''—'' }}{% endmacro %}{%
+        set a = states[''sensor.metra_evening_status''].attributes if states[''sensor.metra_evening_status''] is defined else
+        {} %}{{ hm(a.get(''predicted_departure'')) }}{% if a.get(''predicted_departure'') != a.get(''scheduled_departure'')
+        %} (sched {{ hm(a.get(''scheduled_departure'')) }}){% endif %}'
+      icon: mdi:clock-start
+      color: blue
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: custom:mushroom-template-card
+      entity: sensor.metra_evening_arrival
+      primary: Arrives
+      secondary: '{% macro hm(x) %}{{ as_timestamp(x, 0) | timestamp_custom(''%-I:%M %p'') if x else ''—'' }}{% endmacro %}{%
+        set a = states[''sensor.metra_evening_status''].attributes if states[''sensor.metra_evening_status''] is defined else
+        {} %}{{ hm(a.get(''predicted_arrival'')) }}{% if a.get(''predicted_arrival'') != a.get(''scheduled_arrival'') %} (sched
+        {{ hm(a.get(''scheduled_arrival'')) }}){% endif %}'
+      icon: mdi:clock-end
+      color: teal
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: markdown
+      grid_options:
+        columns: 12
+        rows: auto
+      text_only: true
+      content: |-
+        {% macro hm(x) %}{{ as_timestamp(x, 0) | timestamp_custom('%-I:%M %p') if x else '—' }}{% endmacro %}{% set a = states['sensor.metra_evening_status'].attributes if states['sensor.metra_evening_status'] is defined else {} %}{% set al = (a.get('alerts') or []) | selectattr('relevance', 'in', ['train','station','line']) | list %}{% if a.get('disruption') %}**⚠️ {{ a.get('disruption').get('header') }}**
+
+        {% endif %}{% if a.get('incoming_train') and a.get('departure_risk_min') %}🔁 Equipment arrives on train {{ a.get('incoming_train') }} ({{ a.get('incoming_delay_min') }} min late) — departure could slip ~{{ a.get('departure_risk_min') }} min
+
+        {% endif %}{% if a.get('advisory_delay_min') %}ℹ️ Metra advisory: following trains may be ~{{ a.get('advisory_delay_min') }} min late
+
+        {% endif %}{% for x in al[:3] %}{{ '🚆' if x.get('relevance') == 'train' else '🏛️' if x.get('relevance') == 'station' else '📢' }} {{ x.get('header') }}
+
+        {% endfor %}{% set alt = a.get('alternatives') or [] %}{% if alt %}**Other trains**
+
+        | Train | Departs | Arrives | |
+        |:--|:--|:--|:--|
+        {% for x in alt %}| {{ x.get('train') }} | {{ hm(x.get('departure')) }} | {{ hm(x.get('arrival')) }} | {{ 'express' if x.get('stops_between', 9) <= 3 else x.get('stops_between') ~ ' stops' }}{{ ' · ' ~ x.get('delay_min') ~ 'm late' if x.get('delay_min') else '' }} |
+        {% endfor %}{% endif %}
+  - type: grid
+    cards:
+    - type: heading
+      heading: BNSF line
+      heading_style: title
+      icon: mdi:alert-outline
+    - type: custom:mushroom-template-card
+      primary: Live map
+      secondary: BNSF trains, stations and your trips
+      icon: mdi:map-marker-path
+      color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /local_metra_tracker
+      grid_options:
+        columns: 12
+        rows: 1
+    - type: markdown
+      grid_options:
+        columns: 12
+        rows: auto
+      text_only: true
+      content: |-
+        {% set al = state_attr('sensor.metra_bnsf_alerts', 'alerts') or [] %}{% if not al %}✅ No BNSF service alerts right now.{% endif %}{% for x in al %}**{{ x.get('header') }}**
+
+        <sub>{{ (x.get('description') or '')[:260] }}</sub>
+
+        {% endfor %}
+    - type: custom:mushroom-template-card
+      entity: switch.metra_commuting_today
+      primary: Commuting today
+      secondary: '{{ ''Alerts and announcements on'' if is_state(''switch.metra_commuting_today'',''on'') else ''Off — no
+        train alerts today'' }}'
+      icon: mdi:briefcase-variant
+      color: '{{ ''green'' if is_state(''switch.metra_commuting_today'',''on'') else ''grey'' }}'
+      tap_action:
+        action: toggle
+      grid_options:
+        columns: 12
+        rows: 1
+    - type: custom:mushroom-template-card
+      entity: event.metra_events
+      primary: Last event
+      secondary: '{% set m = state_attr(''event.metra_events'',''message'') %}{{ m if m else ''None yet'' }}{% if m %} · {{
+        relative_time(states(''event.metra_events'') | as_datetime) }} ago{% endif %}'
+      icon: mdi:bell-ring-outline
+      color: blue
+      multiline_secondary: true
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: custom:mushroom-template-card
+      entity: binary_sensor.metra_feed
+      primary: Metra live data
+      secondary: '{{ ''Connected'' if is_state(''binary_sensor.metra_feed'',''on'') else ''Unavailable — showing schedule''
+        }} · schedule valid to {{ states(''sensor.metra_schedule_valid_until'') }}'
+      icon: mdi:access-point-network
+      color: '{{ ''green'' if is_state(''binary_sensor.metra_feed'',''on'') else ''red'' }}'
+      grid_options:
+        columns: 12
+        rows: 1

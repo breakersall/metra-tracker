@@ -1,0 +1,73 @@
+# Example automations built on the add-on's event entity (event.metra_events).
+# Replace notify.mobile_app_your_phone / media_player.kitchen_speaker / the trip slug "morning" with your own.
+
+# 1) Push for anything that matters on a commute day (the add-on only emits these while "Commuting today" is on)
+- alias: Metra - push train problems
+  mode: queued
+  triggers:
+    - trigger: state
+      entity_id: event.metra_events
+  conditions:
+    - condition: template
+      value_template: >
+        {{ trigger.to_state.attributes.event_type in
+           ['delay', 'delay_risk', 'disruption', 'cancelled', 'not_stopping', 'unconfirmed', 'reinstated', 'recovered'] }}
+  actions:
+    - action: notify.mobile_app_your_phone
+      data:
+        title: "🚆 Metra {{ trigger.to_state.attributes.trip }}"
+        message: "{{ trigger.to_state.attributes.message }}"
+        data:
+          tag: "metra-{{ trigger.to_state.attributes.trip_slug }}"
+          push:
+            interruption-level: time-sensitive
+
+# 2) Morning brief: push + spoken summary at a fixed time on commute days
+- alias: Metra - morning brief
+  triggers:
+    - trigger: time
+      at: "06:50:00"
+  conditions:
+    - condition: state
+      entity_id: switch.metra_commuting_today
+      state: "on"
+    - condition: template
+      value_template: "{{ state_attr('sensor.metra_morning_status', 'service_date') == now().strftime('%Y-%m-%d') }}"
+  actions:
+    - variables:
+        s: "{{ states('sensor.metra_morning_status') }}"
+        a: "{{ states.sensor.metra_morning_status.attributes }}"
+        brief: >
+          Train {{ a.train }} from {{ a.from }} at
+          {{ as_timestamp(a.scheduled_departure) | timestamp_custom('%-I:%M') }} is {{ s | lower }}
+          {%- if a.delay_min %}, about {{ a.delay_min }} minutes late{% endif %}.
+          {% set al = (a.alerts or []) | selectattr('relevance', 'in', ['train', 'station', 'line']) | list %}
+          {%- if al %} {{ al | count }} Metra alert{{ 's' if al | count > 1 }}: {{ al[0].header }}.{% else %} No alerts.{% endif %}
+    - action: notify.mobile_app_your_phone
+      data:
+        title: "🚆 Morning train"
+        message: "{{ brief }}"
+    - action: tts.speak
+      target:
+        entity_id: tts.home_assistant_cloud
+      data:
+        media_player_entity_id: media_player.kitchen_speaker
+        message: "{{ brief }}"
+
+# 3) Turn a light red while the morning train has a problem (needs a color light)
+- alias: Metra - problem light
+  triggers:
+    - trigger: state
+      entity_id: binary_sensor.metra_morning_problem
+      to: "on"
+  conditions:
+    - condition: state
+      entity_id: switch.metra_commuting_today
+      state: "on"
+  actions:
+    - action: light.turn_on
+      target:
+        entity_id: light.hallway_color_light
+      data:
+        rgb_color: [255, 0, 0]
+        brightness_pct: 60

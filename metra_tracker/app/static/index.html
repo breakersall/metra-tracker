@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Metra Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  :root {
+    --bg: #fafafa; --card: #ffffff; --text: #212121; --muted: #6b6b6b; --border: rgba(0,0,0,.08);
+    --shadow: 0 2px 10px rgba(0,0,0,.12); --green: #2e9b48; --amber: #e39b00; --red: #d93025; --blue: #1e88e5;
+    --grey: #8a8a8a; --chip: rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111; --card: #1d1d1f; --text: #e8e8e8; --muted: #a0a0a0; --border: rgba(255,255,255,.1);
+            --shadow: 0 2px 12px rgba(0,0,0,.5); --chip: rgba(255,255,255,.08); }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+               font: 14px/1.4 Roboto, "Segoe UI", system-ui, -apple-system, sans-serif; }
+  #map { position: fixed; inset: 0; background: var(--bg); }
+  .panel { position: fixed; z-index: 1000; top: 12px; left: 12px; width: min(360px, calc(100vw - 24px));
+           max-height: calc(100vh - 24px); overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow);
+          padding: 12px 14px; }
+  .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .head h1 { font-size: 17px; margin: 0; font-weight: 600; flex: 1; min-width: 0; white-space: nowrap;
+             overflow: hidden; text-overflow: ellipsis; }
+  .panel > * { min-width: 0; }
+  @media (prefers-color-scheme: dark) {
+    .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.9); }
+  }
+  .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12px;
+          background: var(--chip); color: var(--muted); white-space: nowrap; cursor: default; border: 0; }
+  button.pill { cursor: pointer; color: var(--text); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--grey); }
+  .trip { cursor: pointer; border-left: 4px solid var(--grey); }
+  .trip .t1 { font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+  .trip .t2 { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .trip .t3 { font-size: 12px; margin-top: 4px; }
+  .status { font-weight: 600; }
+  .s-green { color: var(--green); } .s-amber { color: var(--amber); } .s-red { color: var(--red); }
+  .s-blue { color: var(--blue); } .s-grey { color: var(--muted); }
+  .b-green { border-left-color: var(--green); } .b-amber { border-left-color: var(--amber); }
+  .b-red { border-left-color: var(--red); } .b-blue { border-left-color: var(--blue); } .b-grey { border-left-color: var(--grey); }
+  .alerts h3 { margin: 0 0 6px; font-size: 13px; }
+  .alerts p { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+  .alerts b { color: var(--text); font-weight: 600; }
+  .hidden { display: none !important; }
+  .foot { position: fixed; z-index: 1000; left: 12px; bottom: 18px; }
+  .legend { position: fixed; z-index: 1000; right: 12px; bottom: 26px; font-size: 12px; display: flex; gap: 10px;
+            padding: 8px 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  /* train marker */
+  .tm { position: relative; width: 34px; height: 34px; }
+  .tm .c { position: absolute; inset: 3px; border-radius: 50%; background: var(--card); border: 3px solid var(--grey);
+           display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700;
+           color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  .tm .a { position: absolute; left: 50%; top: 50%; width: 0; height: 0; margin: -22px 0 0 -6px;
+           border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 9px solid var(--grey);
+           transform-origin: 6px 22px; }
+  .tm.tracked .c { inset: 0; border-width: 4px; font-size: 11px; }
+  .tm.tracked::after { content: attr(data-name); position: absolute; top: 36px; left: 50%; transform: translateX(-50%);
+           background: var(--card); color: var(--text); border-radius: 6px; padding: 1px 6px; font-size: 11px;
+           font-weight: 600; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--card); color: var(--text); }
+  .leaflet-popup-content { margin: 10px 12px; font-size: 13px; }
+  .leaflet-tooltip.st { background: var(--card); color: var(--text); border: 1px solid var(--border);
+           box-shadow: var(--shadow); font-weight: 600; font-size: 11px; padding: 1px 6px; }
+  @media (max-width: 600px) {
+    .panel { top: 8px; left: 8px; width: calc(100vw - 16px); max-height: 42vh; gap: 6px; }
+    .card { padding: 9px 12px; border-radius: 12px; }
+    .trip .t2 { font-size: 12px; }
+    .legend { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <div class="card head">
+    <h1 id="title">Metra</h1>
+    <span class="pill" id="live"><span class="dot"></span><span>Loading…</span></span>
+    <button class="pill" id="alertsBtn" title="Service alerts">⚠ <span id="alertCount">0</span></button>
+    <button class="pill" id="collapse" title="Show/hide trips">▾</button>
+  </div>
+  <div id="trips"></div>
+  <div class="card alerts hidden" id="alerts"></div>
+</div>
+<div class="card legend">
+  <span><span class="dot" style="background:var(--green)"></span>On time</span>
+  <span><span class="dot" style="background:var(--amber)"></span>Late</span>
+  <span><span class="dot" style="background:var(--red)"></span>10+ min</span>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+let TZ = "America/Chicago";
+const hm = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: "numeric", minute: "2-digit", timeZone: TZ}) : "—";
+const dayOf = (iso) => new Date(iso).toLocaleDateString("en-CA", {timeZone: TZ});
+const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+const map = L.map("map", {zoomControl: false, attributionControl: true}).setView([41.83, -87.95], 11);
+L.control.zoom({position: "bottomright"}).addTo(map);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+}).addTo(map);
+
+const lineLayer = L.layerGroup().addTo(map);
+const stationLayer = L.layerGroup().addTo(map);
+const trainLayer = L.layerGroup().addTo(map);
+let drawnLines = "", fitted = false, state = null;
+const trainMarkers = new Map();
+
+function statusClass(t) {
+  if (t.problem || ["Cancelled", "Not stopping", "Delayed"].includes(t.status)) return "red";
+  if (t.status === "Late") return (t.delay_min || 0) >= 10 ? "red" : "amber";
+  if (t.status === "On time") return "green";
+  if (t.status === "Departed") return (t.delay_min || 0) >= 5 ? "amber" : "blue";
+  if (t.status === "Unconfirmed") return "amber";
+  return "grey";
+}
+function delayColor(d) {
+  if (d === null || d === undefined) return "var(--grey)";
+  return d >= 10 ? "var(--red)" : d >= 2 ? "var(--amber)" : "var(--green)";
+}
+
+function drawLines(lines, trips) {
+  const key = JSON.stringify(lines.map((l) => [l.id, l.polylines.length, l.stations.length])) + JSON.stringify(trips.map((t) => [t.from_id, t.to_id]));
+  if (key === drawnLines) return;
+  drawnLines = key;
+  lineLayer.clearLayers(); stationLayer.clearLayers();
+  const mine = new Set(trips.flatMap((t) => [t.from_id, t.to_id]));
+  const bounds = [];
+  for (const l of lines) {
+    for (const pl of l.polylines) {
+      L.polyline(pl, {color: dark ? "#000" : "#fff", weight: 9, opacity: 0.7}).addTo(lineLayer);
+      L.polyline(pl, {color: l.color, weight: 5, opacity: 0.95}).addTo(lineLayer);
+      bounds.push(...pl);
+    }
+    for (const s of l.stations) {
+      const m = mine.has(s.id);
+      const c = L.circleMarker([s.lat, s.lon], {radius: m ? 7 : 4, weight: 2, color: m ? l.color : (dark ? "#ddd" : "#555"),
+        fillColor: dark ? "#1d1d1f" : "#fff", fillOpacity: 1}).addTo(stationLayer);
+      c.bindTooltip(esc(s.name), {permanent: m, direction: "top", className: "st", offset: [0, -6]});
+    }
+  }
+  if (!fitted && bounds.length) {
+    const focus = lines.flatMap((l) => l.stations.filter((s) => mine.has(s.id)).map((s) => [s.lat, s.lon]));
+    map.fitBounds(focus.length >= 2 ? L.latLngBounds(focus).pad(0.35) : L.latLngBounds(bounds).pad(0.05));
+    fitted = true;
+  }
+}
+
+function trainIcon(t) {
+  const tracked = !!t.tracked;
+  const col = delayColor(t.delay_min);
+  const html = `<div class="tm ${tracked ? "tracked" : ""}" data-name="${esc(t.tracked || "")}">
+      <div class="a" style="transform: rotate(${Number(t.bearing) || 0}deg); border-bottom-color:${col}"></div>
+      <div class="c" style="border-color:${col}">${esc(t.train)}</div></div>`;
+  return L.divIcon({html, className: "", iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -16]});
+}
+
+function trainPopup(t) {
+  const d = t.delay_min === null || t.delay_min === undefined ? "No prediction" : t.delay_min <= 1 ? "On time" : `${t.delay_min} min late`;
+  return `<b>Train ${esc(t.train)}</b>${t.tracked ? ` · ${esc(t.tracked)}` : ""}<br>
+    ${t.headsign ? `To ${esc(t.headsign)}<br>` : ""}
+    <span style="color:${delayColor(t.delay_min)};font-weight:600">${d}</span>
+    ${t.next_stop ? `<br>Next: ${esc(t.next_stop)} ${hm(t.next_time)}` : ""}
+    ${t.age_s !== null && t.age_s !== undefined ? `<br><span style="color:var(--muted)">GPS ${t.age_s}s ago</span>` : ""}`;
+}
+
+function drawTrains(trains) {
+  const seen = new Set();
+  for (const t of trains) {
+    const k = `${t.line}:${t.train}`;
+    seen.add(k);
+    let m = trainMarkers.get(k);
+    if (!m) {
+      m = L.marker([t.lat, t.lon], {icon: trainIcon(t), zIndexOffset: t.tracked ? 1000 : 0}).addTo(trainLayer);
+      trainMarkers.set(k, m);
+    } else {
+      m.setLatLng([t.lat, t.lon]);
+      m.setIcon(trainIcon(t));
+    }
+    m.bindPopup(trainPopup(t));
+  }
+  for (const [k, m] of trainMarkers) {
+    if (!seen.has(k)) { trainLayer.removeLayer(m); trainMarkers.delete(k); }
+  }
+}
+
+function drawTrips(trips, trains) {
+  $("trips").innerHTML = trips.map((t, i) => {
+    const c = statusClass(t);
+    const late = t.status === "Late" && t.delay_min ? ` · ${t.delay_min} min` : "";
+    const today = t.departure && dayOf(t.departure) === dayOf(new Date().toISOString());
+    const day = t.departure && !today ? new Date(t.departure).toLocaleDateString([], {weekday: "short", timeZone: TZ}) + " " : "";
+    return `<div class="card trip b-${c}" data-i="${i}">
+      <div class="t1"><span>${esc(t.name)} · Train ${esc(t.train || "—")}</span><span class="status s-${c}">${esc(t.status)}${late}</span></div>
+      <div class="t2">${esc(t.from)} ${day}${hm(t.departure)} → ${esc(t.to)} ${hm(t.arrival)}</div>
+      ${t.detail ? `<div class="t3">${esc(t.detail)}</div>` : ""}
+    </div>`;
+  }).join("");
+  document.querySelectorAll(".trip").forEach((el) => el.addEventListener("click", () => {
+    const t = trips[Number(el.dataset.i)];
+    const live = trains.find((x) => x.train === t.train && x.line === t.line);
+    if (live) { map.flyTo([live.lat, live.lon], 14); trainMarkers.get(`${live.line}:${live.train}`)?.openPopup(); return; }
+    const st = state.lines.flatMap((l) => l.stations).find((s) => s.id === t.from_id);
+    if (st) map.flyTo([st.lat, st.lon], 13);
+  }));
+}
+
+function drawAlerts(alerts) {
+  const all = Object.entries(alerts || {}).flatMap(([line, a]) => a.map((x) => ({line, ...x})));
+  const seen = new Set();
+  const uniq = all.filter((a) => !seen.has(a.header) && seen.add(a.header));
+  $("alertCount").textContent = uniq.length;
+  $("alertsBtn").style.color = uniq.length ? "var(--amber)" : "";
+  $("alerts").innerHTML = uniq.length
+    ? "<h3>Service alerts</h3>" + uniq.map((a) => `<p><b>${esc(a.header)}</b><br>${esc(a.description)}</p>`).join("")
+    : "<h3>Service alerts</h3><p>No alerts for your lines right now.</p>";
+}
+
+function drawLive(s) {
+  const dot = $("live").querySelector(".dot");
+  const label = $("live").querySelector("span:last-child");
+  if (!s.generated) { label.textContent = "Starting…"; return; }
+  const ok = s.feed_ok;
+  dot.style.background = ok ? "var(--green)" : "var(--red)";
+  const n = s.trains.length;
+  label.textContent = ok ? `Live · ${n} train${n === 1 ? "" : "s"}` : "Feed down · schedule";
+  $("title").textContent = "Metra · " + s.lines.map((l) => l.id).join(", ");
+}
+
+async function refresh() {
+  try {
+    const r = await fetch("api/state", {cache: "no-store"});
+    if (!r.ok) throw new Error(r.status);
+    state = await r.json();
+    if (!state.lines) return;
+    if (state.tz) TZ = state.tz;
+    drawLines(state.lines, state.trips);
+    drawTrains(state.trains);
+    drawTrips(state.trips, state.trains);
+    drawAlerts(state.alerts);
+    drawLive(state);
+  } catch (e) {
+    $("live").querySelector("span:last-child").textContent = "Add-on unreachable";
+    $("live").querySelector(".dot").style.background = "var(--red)";
+  }
+}
+
+$("alertsBtn").addEventListener("click", () => $("alerts").classList.toggle("hidden"));
+$("collapse").addEventListener("click", () => {
+  const h = $("trips").classList.toggle("hidden");
+  $("collapse").textContent = h ? "▸" : "▾";
+});
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>

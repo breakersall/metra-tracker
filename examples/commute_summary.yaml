@@ -1,0 +1,17 @@
+# Optional: a one-line "next train" sensor for dashboards (used by the example dashboard's Live map badge).
+# Add under `template:` in configuration.yaml, or create it in the UI: Settings -> Helpers -> Template -> Sensor.
+# Shows the "morning" trip before noon and the "evening" trip after; rename to match your trip names.
+template:
+  - sensor:
+      - name: Metra commute summary
+        unique_id: metra_commute_summary
+        icon: mdi:train
+        state: >
+          {% set p = 'morning' if now().hour < 12 else 'evening' %}
+          {% set e = 'sensor.metra_' ~ p ~ '_status' %}
+          {% set s = states(e) %}
+          {% set dep = state_attr(e, 'predicted_departure') or state_attr(e, 'scheduled_departure') %}
+          {% set ts = as_timestamp(dep, none) %}
+          {% set day = '' if ts is none or (ts | timestamp_custom('%Y-%m-%d')) == now().strftime('%Y-%m-%d') else (ts | timestamp_custom('%a ')) %}
+          {% set late = ' ' ~ state_attr(e, 'delay_min') ~ 'm' if s == 'Late' and state_attr(e, 'delay_min') else '' %}
+          {{ (state_attr(e, 'train') or '?') ~ ' · ' ~ s ~ late ~ (' · ' ~ day ~ (ts | timestamp_custom('%-I:%M')) if ts is not none else '') }}
