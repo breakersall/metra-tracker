@@ -1,17 +1,25 @@
 # Example automations built on the add-on's event entity (event.metra_events).
 # Replace notify.mobile_app_your_phone / media_player.kitchen_speaker / the trip slug "morning" with your own.
 
-# 1) Push for anything that matters on a commute day (the add-on only emits these while "Commuting today" is on)
+# 1) Push for anything that matters on a commute day
 - alias: Metra - push train problems
   mode: queued
   triggers:
+    # The event entity drops to unavailable and comes back with the last event whenever the add-on or HA restarts;
+    # not_from plus the 5-minute freshness check below keep that old event from being pushed again.
     - trigger: state
       entity_id: event.metra_events
+      not_from: [unavailable, unknown]
+      not_to: [unavailable, unknown]
   conditions:
+    - condition: state
+      entity_id: switch.metra_commuting_today
+      state: "on"
     - condition: template
       value_template: >
         {{ trigger.to_state.attributes.event_type in
-           ['delay', 'delay_risk', 'disruption', 'cancelled', 'not_stopping', 'unconfirmed', 'reinstated', 'recovered'] }}
+           ['delay', 'delay_risk', 'disruption', 'cancelled', 'not_stopping', 'unconfirmed', 'reinstated', 'recovered']
+           and (now() - as_datetime(trigger.to_state.state)).total_seconds() < 300 }}
   actions:
     - action: notify.mobile_app_your_phone
       data:

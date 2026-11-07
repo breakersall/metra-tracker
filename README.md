@@ -25,10 +25,9 @@ from unpkg.com in your browser.
 
 1. Get a free API token at <https://metra.com/metra-gtfs-api>.
 2. Make sure the **Mosquitto broker** add-on and the **MQTT** integration are set up.
-3. Install the add-on, either way:
-   - **Add-on repository:** in Home Assistant go to Settings → Add-ons → Add-on store → ⋮ → Repositories, and add this
-     repository's URL. A *private* GitHub repository needs a URL with a read-only token, so the simpler option for private
-     sharing is the local install below.
+3. Add the add-on, either way:
+   - **Add-on repository (recommended):** in Home Assistant go to Settings → Add-ons → Add-on store → ⋮ →
+     Repositories, and add `https://github.com/breakersall/metra-tracker`. Updates then show up in Settings.
    - **Local add-on:** copy the `metra_tracker` folder into the `/addons` share (with the Samba or SSH add-on). Then go to
      Add-on store → ⋮ → Check for updates; it appears under **Local add-ons**.
 4. Install **Metra Tracker**, open its **Configuration** tab, add your token and trips, and start it. See the add-on's
